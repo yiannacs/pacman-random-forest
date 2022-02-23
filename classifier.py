@@ -17,8 +17,11 @@ class Classifier:
         data = np.array(data)
         target = np.array(target)
         
+        data_train = data
+        target_train = target
+        
         # Split data
-        data_train, data_test, target_train, target_test = train_test_split(data, target, test_size=0.15)
+        # data_train, data_test, target_train, target_test = train_test_split(data, target, test_size=0.15)
         
         # Add headers to training data
         # This makes it easier to keep indexes when splitting/taking attributes out
@@ -27,11 +30,72 @@ class Classifier:
         
         self.root = self.buildTree(data_train, target_train)
         
+        self.printTree(self.root)
+        self.pruneTree()
+        
+        # Evaluate tree
+        # tree_accuracy = self.test(data_test, target_test)
+        # print('Accuracy = {}'.format(tree_accuracy))
+        
         print()
         print('*************************************************')
-        self.printTree(self.root)
         # print(data.shape)
         
+    def pruneTree(self):
+        paths = []
+        
+        # paths.append(dict({'path':list()})).
+        path = []
+        self.traverse(self.root, paths, list(path))
+        
+        for path_i in paths:
+            print(path_i)
+        # print(paths)
+        
+    # Rule conversion
+# https://www.ibm.com/docs/en/spss-modeler/18.1.0?topic=nuggets-decision-tree-model-rules#treerule_output_modeltab    
+    def traverse(self, node, paths, path):
+        print('HOLAHOLA')
+        print(node.value)
+        # path.append(42)
+        # print(path)
+        # print()
+        # # Decission node
+        # print(node.value)
+        try:
+            if node.attr_true is not None:
+                # print('Not a leaf')
+                # print(node.attr_false.value)
+                # print(paths)
+                # print(type(path))
+                # Left path
+                path_left = list(path)
+                path_left.append((node.value, 0))
+                self.traverse(node.attr_false, paths, path_left)
+    
+                # Right path
+                path_right = list(path)
+                path_right.append((node.value, 1))                
+                self.traverse(node.attr_true, paths, path_right)
+                
+            # Leaf node
+            if node.attr_true is None:
+                paths.append({'path': path, 'target': node.value})
+            # if any side is None, the node is a leaf
+        except AttributeError as err:
+            print('ERROR\t{}'.format(node.value))
+            # print(node.value)
+        
+        
+    def test(self, data, target):
+        predictions = self.predictBatch(data)
+        predictions_correct = np.count_nonzero(np.equal(predictions, target))
+        accuracy = predictions_correct / len(target)
+        
+        return accuracy
+        
+        # https://en.wikipedia.org/wiki/ID3_algorithm
+        # Also the book
     def buildTree(self, data, target):
         # For testing
         # target = np.array([1,1,1,1,1])
@@ -51,14 +115,14 @@ class Classifier:
         # print('Holi1')
         # Check if target has all equal values:
         if np.equal(target, target[0]).all():
-            print('All targets are equal, returning val = {}'.format(target[0]))
+            # print('All targets are equal, returning val = {}'.format(target[0]))
             return TreeNode(value=target[0])
             # print(node.value)
             
         # print('Holi2')
         # No attributes left
         if data.shape[1] == 0:
-            print('No attributes left, val = {}'.format(np.argmax(np.bincount(target))))
+            # print('No attributes left, val = {}'.format(np.argmax(np.bincount(target))))
             # Use most common target value
             return TreeNode(value=np.argmax(np.bincount(target)))
         
@@ -68,7 +132,7 @@ class Classifier:
             # print('DATA IS ALL THE SAME')
             # print(data)
             # print(target)
-            print('All data is equal, val = {}'.format(np.argmax(np.bincount(target))))
+            # print('All data is equal, val = {}'.format(np.argmax(np.bincount(target))))
             # Use most common target value
             return TreeNode(value=np.argmax(np.bincount(target)))
 
@@ -90,24 +154,43 @@ class Classifier:
         
         # If case attribute==0 is empty, set to most frequent value
         if len(attr_zeros) == 0:
-            print('Left side has no attr = {}'.format(np.argmax(np.bincount(target))))
+            # print('Left side has no attr = {}'.format(np.argmax(np.bincount(target))))
             left = TreeNode(value=np.argmax(np.bincount(target_zeros)))
+            # left_is_leaf = True
         else:
-            print('Recursively building left side')
+            # print('Recursively building left side')
             # Still have data, recursively built this branch
             left = self.buildTree(attr_zeros, target_zeros)
-        
+            # left_is_leaf = False
+            
+        if left.attr_false is None and left.attr_true is None:
+            left_is_leaf = True
+        else:
+            left_is_leaf = False
+
         # print('Gonna do right now')
         # If case attribute==1 is empty, set to most frequent value
         if len(attr_ones) == 0:
-            print('Right side has no attr, val = {}'.format(np.argmax(np.bincount(target))))
+            # print('Right side has no attr, val = {}'.format(np.argmax(np.bincount(target))))
             right = TreeNode(value=np.argmax(np.bincount(target_ones)))
+            # right_is_leaf = True
         else:
-            print('Recursively building right side')
+            # print('Recursively building right side')
             # Still have data, recursively built this branch
             right = self.buildTree(attr_ones, target_ones)
+            # right_is_leaf = False
+        
+        if right.attr_false is None and right.attr_true is None:
+            right_is_leaf = True
+        else:
+            right_is_leaf = False
+        
+        # print('Returning attr = {}'.format(data[0][attr_max_gain_current_index]))
+        if right_is_leaf and left_is_leaf:
+            if right.value == left.value:
+                # print('HOLA')
+                return TreeNode(value=right.value)
             
-        print('Returning attr = {}'.format(data[0][attr_max_gain_current_index]))
         return TreeNode(value=data[0][attr_max_gain_current_index], attr_false=left, attr_true=right)
     
     def printTree(self, node, depth=0):
@@ -181,10 +264,40 @@ class Classifier:
         attr_zeros = np.delete(attr_zeros, attr, axis=1)
         attr_ones = np.delete(attr_ones, attr, axis=1)
         
-        return attr_zeros, target_zeros, attr_ones, target_ones        
+        return attr_zeros, target_zeros, attr_ones, target_ones    
+
+    def predictBatch(self, data, legal=None):
+        moves = []
+        print(type(data))
+        print(data.shape)
+        for data_i in data:
+            print(data_i.shape)
+            moves.append(self.predict(data_i))
+            
+        return np.array(moves)
             
     def predict(self, data, legal=None):
-        return 1
+        # print('Predicting')
+        # print(type(data))
+        
+        data = np.array(data)
+        
+        move = self.traverseWithData(self.root, data)
+        # print(move)
+        
+        return move
+    
+    def traverseWithData(self, node, data):
+        # If node is a leaf, return value
+        if node.attr_false is None and node.attr_true is None:
+            return node.value
+        
+        # Node is not a leaf
+        attribute = node.value
+        if data[attribute]:
+            return self.traverseWithData(node.attr_true, data)
+        else:
+            return self.traverseWithData(node.attr_false, data)
     
     def parseData(self, data):
         # print('ruifhceruifhceuij')
