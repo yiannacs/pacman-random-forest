@@ -5,6 +5,7 @@
 
 import numpy as np
 from sklearn.model_selection import train_test_split
+import copy
 
 class Classifier:
     def __init__(self):
@@ -21,7 +22,9 @@ class Classifier:
         target_train = target
         
         # Split data
-        # data_train, data_test, target_train, target_test = train_test_split(data, target, test_size=0.15)
+        # random state 42 breaks shit, 22, 3, 51
+        # Updates paths in first iteration: 5117
+        # data_train, data_test, target_train, target_test = train_test_split(data, target, test_size=0.15, random_state=5117)
         
         # Add headers to training data
         # This makes it easier to keep indexes when splitting/taking attributes out
@@ -30,8 +33,8 @@ class Classifier:
         
         self.root = self.buildTree(data_train, target_train)
         
-        self.printTree(self.root)
-        self.pruneTree()
+        # self.printTree(self.root)
+        self.pruneTree(data_train[1:len(data_train), :], target_train)
         
         # Evaluate tree
         # tree_accuracy = self.test(data_test, target_test)
@@ -41,22 +44,123 @@ class Classifier:
         print('*************************************************')
         # print(data.shape)
         
-    def pruneTree(self):
+    def pruneTree(self, data, target):
         paths = []
         
-        # paths.append(dict({'path':list()})).
+        # Generate rule table
         path = []
         self.traverse(self.root, paths, list(path))
         
+        print('the OG, fress out of the oven paths')
         for path_i in paths:
             print(path_i)
         # print(paths)
+        print()
+        
+        # test = data[0, :]
+        # print(self.predictWithRules(test))
+        
+        # Test accuracy when removing rules
+        for i in range(len(paths)):
+            for step in paths[i]['path']:
+            # for j in range(len(paths[i]['path'])):
+                # Deep copy to keep original intact when removing preconditions
+                alt_path = copy.deepcopy(paths)
+                if i == 0:
+                    print('{}\t{}'.format(i, step))
+                    # print(alt_path[i]['path'][j])
+                
+                # alt_path[i]['path'] = [alt_path[i]['path'][l] for l in range(len(alt_path[i]['path'])) if l != j]
+                # print(alt_path[i]['path'])
+                # alt_path[i]['path'].pop(j)
+                    
+                if i == 0:
+                    print('Vanilla paths')
+                    for path_i in paths:
+                        print(path_i)
+                        
+                    # print('BEFORE alt paths')
+                    # for path_i in alt_path:
+                    #     print(path_i)
+                        
+                alt_path[i]['path'].remove(step)
+                
+                
+                if i == 0:
+                    print('AFTER alt paths')
+                    for path_i in alt_path:
+                        print(path_i)
+                
+                # [x for x in s if not isinstance(x, list)]
+                
+                
+                # del self.path[i]['path'][j]
+                
+                alt_predictions = self.predictWithRulesBatch(data, alt=alt_path)
+                predictions = self.predictWithRulesBatch(data, alt=paths)
+                
+                correct = np.count_nonzero(np.equal(predictions, target))
+                accuracy = correct / len(target)
+                
+                alt_correct = np.count_nonzero(np.equal(alt_predictions, target))
+                alt_accuracy = alt_correct / len(target)
+                
+                print(alt_predictions)
+                print(predictions)
+                
+                if alt_accuracy >= accuracy:
+                    print('Updating paths!')
+                    print('{}\t{}'.format(i, step))
+                    for path in paths:
+                        print(path)
+                    # del step   # idk if this will work try:
+                    paths[i]['path'].remove(step)
+                    # paths[i]['path'].pop(j)
+                    
+                # if j 
+                
+        self.paths = paths
+                
+                
+        
+    def predictWithRulesBatch(self, data, alt=None):
+        predictions = []
+        for row in data:
+            pred_i = self.predictWithRules(row, alt)
+            predictions.append(pred_i)
+            
+        return np.array(predictions)
+        
+    def predictWithRules(self, data, alt=None):
+        # prediction = None
+        # data = data.reshape((1, 25))
+        # print('data shape')
+        # print(data.shape)
+        # print(data)
+        if alt is not None:
+            for path in alt:
+                for step in (path['path']):
+                    # pass
+                    if data[step[0]] != step[1]:
+                        break
+                    if step == path['path'][-1]:
+                        return path['target']
+        else:
+            for path in self.paths:
+                for step in (path['path']):
+                    # pass
+                    if data[step[0]] != step[1]:
+                        break
+                    if step == path['path'][-1]:
+                        return path['target']
+                        
+                    
         
     # Rule conversion
-# https://www.ibm.com/docs/en/spss-modeler/18.1.0?topic=nuggets-decision-tree-model-rules#treerule_output_modeltab    
+    # https://www.ibm.com/docs/en/spss-modeler/18.1.0?topic=nuggets-decision-tree-model-rules#treerule_output_modeltab    
     def traverse(self, node, paths, path):
-        print('HOLAHOLA')
-        print(node.value)
+        # print('HOLAHOLA')
+        # print(node.value)
         # path.append(42)
         # print(path)
         # print()
@@ -85,6 +189,8 @@ class Classifier:
         except AttributeError as err:
             print('ERROR\t{}'.format(node.value))
             # print(node.value)
+            
+    
         
         
     def test(self, data, target):
@@ -363,6 +469,8 @@ def information_gain(data, target, data_values=None, target_values=None):
         # print('i: {}'.format(i))
         # Count value occurrences
         feature_values, feature_count = np.unique(data[:, i], return_counts=True)
+        # print(feature_count)
+        # print()
         
         sum_entropy_v = 0
         # For each value of the feature
@@ -374,15 +482,18 @@ def information_gain(data, target, data_values=None, target_values=None):
             entropy_v = entropy(target_v)
             
             p_v = feature_count[j]/data.shape[0]
-            
+          
+            # print(p_v)
             sum_entropy_v += p_v * entropy_v
-            
+                                
         entropy_a[i] = entropy_s - sum_entropy_v
     # print('Information gain')
     # print(np.argmax(entropy_a))
     # print(entropy_s)
     # print(entropy_a)
     # print()
+    # print(entropy_a)
+    # print(gain_ratio_a)
     
     return np.argmax(entropy_a)
 
