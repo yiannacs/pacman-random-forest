@@ -29,42 +29,45 @@ class Classifier:
     def buildTree(self, data, target):
         # For testing
         # target = np.array([1,1,1,1,1])
-        print('Building node')
-        print('Remaining attributes: {}'.format(data.shape[1]))
-        print('Remaining data:')
-        print(data)
-        print('Remaining target:')
-        print(target)
-        print('')
+        # print('Building node')
+        # print('Remaining attributes: {}'.format(data.shape[1]))
+        # print('Remaining data:')
+        # print(data)
+        # print('Remaining target:')
+        # print(target)
+        # print('')
         
-        # if data.shape[0] == 7:
-        #     print('I\'m in')
-        #     print(data)
-        #     print(target)
+        # # if data.shape[0] == 7:
+        # #     print('I\'m in')
+        # #     print(data)
+        # #     print(target)
         
-        print('Holi1')
+        # print('Holi1')
         # Check if target has all equal values:
         if np.equal(target, target[0]).all():
+            print('All targets are equal, returning val = {}'.format(target[0]))
             return TreeNode(value=target[0])
             # print(node.value)
             
-        print('Holi2')
+        # print('Holi2')
         # No attributes left
         if data.shape[1] == 0:
+            print('No attributes left, val = {}'.format(np.argmax(np.bincount(target))))
             # Use most common target value
             return TreeNode(value=np.argmax(np.bincount(target)))
         
-        print('Holi3')
+        # print('Holi3')
         # Attributes left, but remaining data is all the same
         if np.equal(data[1:,:], data[1]).all():
-            print('DATA IS ALL THE SAME')
-            print(data)
-            print(target)
+            # print('DATA IS ALL THE SAME')
+            # print(data)
+            # print(target)
+            print('All data is equal, val = {}'.format(np.argmax(np.bincount(target))))
             # Use most common target value
             return TreeNode(value=np.argmax(np.bincount(target)))
 
         
-        print('Holi4')
+        # print('Holi4')
         
         # Find the best attribute left
         attr_max_gain_current_index = information_gain(data[1:, :], target)
@@ -74,52 +77,53 @@ class Classifier:
                                                                                data,
                                                                                target)
         
-        print(attr_max_gain_current_index)
-        print(data[0][attr_max_gain_current_index])
+        # print(attr_max_gain_current_index)
+        # print(data[0][attr_max_gain_current_index])
         
         # If case attribute==0 is empty, set to most frequent value
         if len(attr_zeros) == 0:
+            print('Left side has no attr = {}'.format(np.argmax(np.bincount(target))))
             left = TreeNode(value=np.argmax(np.bincount(target_zeros)))
         else:
+            print('Recursively building left side')
             # Still have data, recursively built this branch
             left = self.buildTree(attr_zeros, target_zeros)
         
-        print('Gonna do right now')
+        # print('Gonna do right now')
         # If case attribute==1 is empty, set to most frequent value
         if len(attr_ones) == 0:
+            print('Right side has no attr, val = {}'.format(np.argmax(np.bincount(target))))
             right = TreeNode(value=np.argmax(np.bincount(target_ones)))
         else:
+            print('Recursively building right side')
             # Still have data, recursively built this branch
             right = self.buildTree(attr_ones, target_ones)
             
+        print('Returning attr = {}'.format(data[0][attr_max_gain_current_index]))
         return TreeNode(value=data[0][attr_max_gain_current_index], attr_false=left, attr_true=right)
-        
-            
-        # print('branches of first node')
-        # print(attr_zeros.shape)
-        # print(target_zeros)
-        # print(attr_ones.shape)
-        # print(target_ones)
-        # np.mask_rows(attr_zero)
-        # np.mask_rows(attr_ones)
     
-    def printTree(self, root):
-        if root is None:
-            return
+    def printTree(self, node, depth=0):
+        if (node.attr_false is not None) or (node.attr_true is not None):
+            print('{}\tindex = {}'.format(depth, node.value))
+            self.printTree(node.attr_false, depth+1)
+            self.printTree(node.attr_true, depth+1)
+        else:
+            print('{}\ttarget = {}'.format(depth, node.value))
         
-        queue = []
         
-        queue.append(root)
+        # queue = []
         
-        while(len(queue) > 0):
-            print(queue[0].value)
-            node = queue.pop(0)
+        # queue.append(root)
+        
+        # while(len(queue) > 0):
+        #     print(queue[0].value)
+        #     node = queue.pop(0)
             
-            if node.attr_false is not None:
-                queue.append(node.attr_false)
+        #     if node.attr_false is not None:
+        #         queue.append(node.attr_false)
                 
-            if node.attr_true is not None:
-                queue.append(node.attr_true)
+        #     if node.attr_true is not None:
+        #         queue.append(node.attr_true)
                 
         
         
