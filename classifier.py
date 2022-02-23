@@ -4,6 +4,7 @@
 # Use the skeleton below for the classifier and insert your code here.
 
 import numpy as np
+from sklearn.model_selection import train_test_split
 
 class Classifier:
     def __init__(self):
@@ -13,13 +14,18 @@ class Classifier:
         pass
     
     def fit(self, data, target):
-        # data = self.parseData(data)
         data = np.array(data)
-        idx = np.array(range(data.shape[1])).reshape(1, data.shape[1])
-        data = np.concatenate((idx, data), axis=0)
         target = np.array(target)
         
-        self.root = self.buildTree(data, target)
+        # Split data
+        data_train, data_test, target_train, target_test = train_test_split(data, target, test_size=0.15)
+        
+        # Add headers to training data
+        # This makes it easier to keep indexes when splitting/taking attributes out
+        idx = np.array(range(data.shape[1])).reshape(1, data.shape[1])
+        data_train = np.concatenate((idx, data_train), axis=0)
+        
+        self.root = self.buildTree(data_train, target_train)
         
         print()
         print('*************************************************')
@@ -70,6 +76,8 @@ class Classifier:
         # print('Holi4')
         
         # Find the best attribute left
+        # All features are binary, so information gain is a good metric
+        # to determine importance of features.
         attr_max_gain_current_index = information_gain(data[1:, :], target)
         
         # Divide data by values of attr_max_gain
