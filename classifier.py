@@ -6,6 +6,7 @@
 import numpy as np
 from sklearn.model_selection import train_test_split
 import copy
+import random
 
 class Classifier:
     def __init__(self):
@@ -36,6 +37,9 @@ class Classifier:
         # self.printTree(self.root)
         self.pruneTree(data_train[1:len(data_train), :], target_train)
         
+        for path in self.paths:
+            print(path)
+        
         # Evaluate tree
         # tree_accuracy = self.test(data_test, target_test)
         # print('Accuracy = {}'.format(tree_accuracy))
@@ -51,11 +55,11 @@ class Classifier:
         path = []
         self.traverse(self.root, paths, list(path))
         
-        print('the OG, fress out of the oven paths')
-        for path_i in paths:
-            print(path_i)
-        # print(paths)
-        print()
+        # print('the OG, fress out of the oven paths')
+        # for path_i in paths:
+        #     print(path_i)
+        # # print(paths)
+        # print()
         
         # test = data[0, :]
         # print(self.predictWithRules(test))
@@ -66,18 +70,18 @@ class Classifier:
             # for j in range(len(paths[i]['path'])):
                 # Deep copy to keep original intact when removing preconditions
                 alt_path = copy.deepcopy(paths)
-                if i == 0:
-                    print('{}\t{}'.format(i, step))
+                # if i == 0:
+                #     print('{}\t{}'.format(i, step))
                     # print(alt_path[i]['path'][j])
                 
                 # alt_path[i]['path'] = [alt_path[i]['path'][l] for l in range(len(alt_path[i]['path'])) if l != j]
                 # print(alt_path[i]['path'])
                 # alt_path[i]['path'].pop(j)
                     
-                if i == 0:
-                    print('Vanilla paths')
-                    for path_i in paths:
-                        print(path_i)
+                # if i == 0:
+                #     print('Vanilla paths')
+                #     for path_i in paths:
+                #         print(path_i)
                         
                     # print('BEFORE alt paths')
                     # for path_i in alt_path:
@@ -86,33 +90,50 @@ class Classifier:
                 alt_path[i]['path'].remove(step)
                 
                 
-                if i == 0:
-                    print('AFTER alt paths')
-                    for path_i in alt_path:
-                        print(path_i)
+                # if i == 0:
+                #     print('AFTER alt paths')
+                #     for path_i in alt_path:
+                #         print(path_i)
                 
                 # [x for x in s if not isinstance(x, list)]
                 
                 
                 # del self.path[i]['path'][j]
                 
-                alt_predictions = self.predictWithRulesBatch(data, alt=alt_path)
-                predictions = self.predictWithRulesBatch(data, alt=paths)
+                # alt_predictions = self.predictWithRulesBatch(data, alt=[alt_path[i]])
+                # predictions = self.predictWithRulesBatch(data, alt=[paths[i]])
                 
-                correct = np.count_nonzero(np.equal(predictions, target))
-                accuracy = correct / len(target)
+                # Build contingency table
+                xy = np.concatenate((data, target.reshape(1, len(target)).T), axis=1)
+                belong_to_class = np.array([xy[l, :] for l in range(xy.shape[0]) if xy[l, -1]==paths[i]['target']])
+                not_belong_to_class = np.array([xy[l, :] for l in range(xy.shape[0]) if xy[l, -1] != paths[i]['target']])
+                # print(belong_to_class.shape)
                 
-                alt_correct = np.count_nonzero(np.equal(alt_predictions, target))
-                alt_accuracy = alt_correct / len(target)
                 
-                print(alt_predictions)
-                print(predictions)
+                belong_satisfy = np.sum(belong_to_class[:, step[0]])
+                belong_not_satisfy = belong_to_class.shape[0] - belong_satisfy
                 
-                if alt_accuracy >= accuracy:
+                not_belong_satisfy = np.sum(not_belong_to_class[:, step[0]])
+                not_belong_not_satisfy = not_belong_to_class.shape[0] - not_belong_satisfy
+                
+                certainty = self.computeCertainty(belong_satisfy, not_belong_satisfy)
+                # certainty = (belong_satisfy - 1/2) / (belong_satisfy + not_belong_satisfy)
+                certainty_alt = self.computeCertainty(belong_satisfy + belong_not_satisfy, not_belong_satisfy + not_belong_not_satisfy)
+                
+                # correct = np.count_nonzero(np.equal(predictions, target))
+                # accuracy = correct / len(target)
+                
+                # alt_correct = np.count_nonzero(np.equal(alt_predictions, target))
+                # alt_accuracy = alt_correct / len(target)
+                
+                # # print(alt_predictions)
+                # # print(predictions)
+                
+                if certainty_alt >= certainty:
                     print('Updating paths!')
-                    print('{}\t{}'.format(i, step))
-                    for path in paths:
-                        print(path)
+                    # print('{}\t{}'.format(i, step))
+                    # for path in paths:
+                    #     print(path)
                     # del step   # idk if this will work try:
                     paths[i]['path'].remove(step)
                     # paths[i]['path'].pop(j)
@@ -120,8 +141,9 @@ class Classifier:
                 # if j 
                 
         self.paths = paths
-                
-                
+        
+    def computeCertainty(self, y1, e1):
+        return (y1 - 1/2) / (y1 + e1)
         
     def predictWithRulesBatch(self, data, alt=None):
         predictions = []
@@ -308,22 +330,6 @@ class Classifier:
             print('{}\ttarget = {}'.format(depth, node.value))
         
         
-        # queue = []
-        
-        # queue.append(root)
-        
-        # while(len(queue) > 0):
-        #     print(queue[0].value)
-        #     node = queue.pop(0)
-            
-        #     if node.attr_false is not None:
-        #         queue.append(node.attr_false)
-                
-        #     if node.attr_true is not None:
-        #         queue.append(node.attr_true)
-                
-        
-        
     def branchOutAttribute(self, attr, data, target):
         # Get mask to keep rows where attribute value is zero
         mask_zeros = np.ma.masked_where(data[1:,attr]==1, data[1:, attr]).mask
@@ -388,8 +394,9 @@ class Classifier:
         
         data = np.array(data)
         
-        move = self.traverseWithData(self.root, data)
-        # print(move)
+        # move = self.traverseWithData(self.root, data)
+        move = self.predictWithRules(data, alt=random.shuffle(self.paths))
+        print(move)
         
         return move
     
