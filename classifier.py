@@ -40,9 +40,11 @@ class Classifier:
         self.pruneTree(data_train[1:len(data_train), :], target_train)
         
         # Sort by certainty factor
+        # Simplifying decision trees   1987
         self.paths.sort(reverse=True, key=lambda x: x['cf'])
         
         # Find default
+        # C4.5: Programs for Machine Learning
         self.default = self.findDefault(data_train[1:len(data_train), :], target)
         print(self.default)
         
