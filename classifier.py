@@ -337,6 +337,7 @@ class Classifier:
         
         # print('Holi1')
         # Check if target has all equal values:
+        print(target)
         if np.equal(target, target[0]).all():
             # print('All targets are equal, returning val = {}'.format(target[0]))
             return TreeNode(value=target[0])
@@ -376,7 +377,7 @@ class Classifier:
         # print(data[0][attr_max_gain_current_index])
         
         # If case attribute==0 is empty, set to most frequent value
-        if len(attr_zeros) == 0:
+        if len(target_zeros) == 0:
             # print('Left side has no attr = {}'.format(np.argmax(np.bincount(target))))
             left = TreeNode(value=np.argmax(np.bincount(target_zeros)))
             # left_is_leaf = True
@@ -393,11 +394,13 @@ class Classifier:
 
         # print('Gonna do right now')
         # If case attribute==1 is empty, set to most frequent value
-        if len(attr_ones) == 0:
+        if len(target_ones) == 0:
             # print('Right side has no attr, val = {}'.format(np.argmax(np.bincount(target))))
-            right = TreeNode(value=np.argmax(np.bincount(target_ones)))
+            right = TreeNode(value=np.argmax(np.bincount(target)))
             # right_is_leaf = True
         else:
+            print(len(attr_ones))
+            print(len(target_ones))
             # print('Recursively building right side')
             # Still have data, recursively built this branch
             right = self.buildTree(attr_ones, target_ones)
