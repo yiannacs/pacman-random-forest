@@ -11,6 +11,7 @@ import random
 class Classifier:
     def __init__(self):
         self.root = TreeNode()
+        self.default = None
 
     def reset(self):
         pass
@@ -35,10 +36,34 @@ class Classifier:
         self.root = self.buildTree(data_train, target_train)
         
         # self.printTree(self.root)
+        # Rule post-prunning
         self.pruneTree(data_train[1:len(data_train), :], target_train)
+        
+        # Sort by certainty factor
+        self.paths.sort(reverse=True, key=lambda x: x['cf'])
+        
+        # Find default
+        self.default = self.findDefault(data_train[1:len(data_train), :], target)
+        print(self.default)
+        
         
         for path in self.paths:
             print(path)
+        
+        
+        # Remove supersets
+        # Doing this in a per-target basis
+        # After class ordering,
+        # some longer rules could end up not being redundant
+        # for i in range(4):
+        #     self.discardRuleSupersets(i)
+        
+        # print()
+        # print('LOOK AT ME NO SUPERSETS NOW')
+        # for path in self.paths:
+        #     print(path)
+            
+        # Class ordering
         
         # Evaluate tree
         # tree_accuracy = self.test(data_test, target_test)
@@ -47,6 +72,71 @@ class Classifier:
         print()
         print('*************************************************')
         # print(data.shape)
+    
+    def findDefault(self, data, target):
+        predictions = self.predictWithRulesBatch(data)
+        unpredicted_targets = target[np.argwhere(predictions==None)]
+        
+        if len(unpredicted_targets) < 1:
+            return np.argmax(np.bincount(target))
+        
+        return np.argmax(np.bincount(unpredicted_targets))
+        
+    # Not ideal, could start second for loop from path_[i + 1]
+    # But then I'd have to deal with the for loop range having indices
+    # that no longer exist
+    def discardRuleSupersets(self, target):
+        found_target_i = False
+        for path_i in self.paths:
+            if path_i['target'] == target:
+                found_target_i = True
+                
+                found_target_j = False
+                for path_j in self.paths:
+                    if path_j['target'] == target:
+                        found_target_j = True
+                    
+                        if path_i != path_j:
+                            if set(path_i['path']).issubset(path_j['path']):
+                                self.paths.remove(path_j)
+                                
+                            if set(path_j['path']).issubset(path_i['path']):
+                                self.paths.remove(path_i)
+                    elif found_target_j:
+                        break
+            elif found_target_i:
+                break
+            
+        
+        
+        # for i in range(len(self.paths)):
+        #     # if self.paths[i]['target'] != target:
+        #     #     break
+            
+        #     for j in range(i, len(self.paths)):
+        #         # if self.paths[j]['target'] != target:
+        #         #     break
+                
+        #         if self.paths[i] != self.paths[j]:
+        #             # print()
+        #             # print(path_i['path'])
+        #             # print(path_j['path'])
+        #             if set(self.paths[i]['path']).issubset(self.paths[j]['path']):
+        #                 # print('deleting those assholes on top')
+        #                 self.paths.remove(self.paths[j])
+                        
+        #             if set(self.paths[j]['path']).issubset(self.paths[i]['path']):
+        #                 # print('deleting those assholes on top')
+        #                 self.paths.remove(self.paths[i])
+                        
+        
+        
+        # for i in range(len(self.paths)):
+        #     path = set(self.paths[i]['path'])
+        #     for j in range(len(self.paths)):
+        #         if i != j:
+        #             if path.issubset(self.paths[j]['path'])
+                
         
     def pruneTree(self, data, target):
         paths = []
@@ -64,6 +154,7 @@ class Classifier:
         # test = data[0, :]
         # print(self.predictWithRules(test))
         
+        # https://www.ijcai.org/Proceedings/87-1/Papers/063.pdf
         # Test accuracy when removing rules
         for i in range(len(paths)):
             for step in paths[i]['path']:
@@ -129,6 +220,7 @@ class Classifier:
                 # # print(alt_predictions)
                 # # print(predictions)
                 
+                paths[i]['cf'] = max([certainty, certainty_alt])
                 if certainty_alt >= certainty:
                     print('Updating paths!')
                     # print('{}\t{}'.format(i, step))
@@ -175,6 +267,9 @@ class Classifier:
                         break
                     if step == path['path'][-1]:
                         return path['target']
+        # No rule found
+        print('No rule found')
+        return self.default
                         
                     
         
@@ -395,8 +490,8 @@ class Classifier:
         data = np.array(data)
         
         # move = self.traverseWithData(self.root, data)
-        move = self.predictWithRules(data, alt=random.shuffle(self.paths))
-        print(move)
+        move = self.predictWithRules(data)
+        # print(move)
         
         return move
     
