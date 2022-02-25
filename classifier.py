@@ -9,22 +9,63 @@ import copy
 import random
 
 class Classifier:
-    def __init__(self):
-        # self.root = TreeNode()
-        # self.default = None
-        self.tree = DecisionTree()
+    def __init__(self, n_trees=5):
+        self.trees = [DecisionTree() for i in range(n_trees)]
+        self.n_trees = n_trees
 
     # TODO Do I need something here?
     def reset(self):
         pass
     
     def fit(self, data, target):
-        self.tree.fit(data, target)
-        self.tree.printRuleTable()
+        data = np.array(data)
+        target = np.array(target)
+        
+        if self.n_trees == 1:
+            # Train tree with set as it is
+            self.trees[0].fit(data, target)
+        else:
+            # Random feature selection
+            # Rule out features evidently with no effect
+            
+            attributes = []
+            # If there's more than one class
+            if not np.equal(target, target[0]).all():
+                # For each attribute
+                for i in range(data.shape[1]):
+                    # Attribute has more than one value
+                    if not np.equal(data[:,i], data[0, i]).all():
+                        # Make feature selectable
+                        attributes.append(i)
+            
+            attributes = np.array(attributes)
+            size_feature_split = int(np.log2(len(attributes) + 1))
+            
+            for i in range(self.n_trees):
+                features_i = np.random.choice(attributes, size_feature_split, replace=False)
+                print('Training tree {} with features:'.format(i))
+                print(features_i)
+                print()
+                
+                data_i = data[:, features_i]
+                
+                self.trees[i].fit(data_i, target)
+            
+            # print(size_feature_split)
         
     def predict(self, data, legal=None):
-        self.tree.predict(data, legal)
-    
+        data = np.array(data)
+
+        if self.n_trees == 1:    
+            return self.trees[0].predict(data, legal)
+        else:
+            predictions = []
+            
+            for tree in self.trees:
+                predictions.append(tree.predict(data, legal))
+                
+            return np.argmax(np.bincount(predictions))
+            
 class DecisionTree:
     def __init__(self):
         self.root = None
@@ -56,8 +97,8 @@ class DecisionTree:
         """
         
         # Convert data to numpy array
-        data = np.array(data)
-        target = np.array(target)
+        # data = np.array(data)
+        # target = np.array(target)
         
         # Not splitting data
         data_train = data
@@ -99,7 +140,6 @@ class DecisionTree:
 
         """
         
-        data = np.array(data)
         
         # Predict using simplified rules table
         move = self.predictWithRules(data)
@@ -284,7 +324,9 @@ class DecisionTree:
             return np.argmax(np.bincount(target))
         
         # Return most common class among unpredicted cases
-        return np.argmax(np.bincount(unpredicted_targets))
+        print('There were unpredicted cases')
+        print(unpredicted_targets)
+        return np.argmax(np.bincount(unpredicted_targets.flatten()))
         
     def discardRuleSupersets(self, paths, target):
         """
