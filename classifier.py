@@ -9,7 +9,7 @@ import copy
 import random
 
 class Classifier:
-    def __init__(self, n_trees=5):
+    def __init__(self, n_trees=10):
         self.trees = [DecisionTree() for i in range(n_trees)]
         self.n_trees = n_trees
 
@@ -25,9 +25,7 @@ class Classifier:
             # Train tree with set as it is
             self.trees[0].fit(data, target)
         else:
-            # Random feature selection
-            # Rule out features evidently with no effect
-            
+            # Rule out features evidently with no effect            
             attributes = []
             # If there's more than one class
             if not np.equal(target, target[0]).all():
@@ -37,19 +35,28 @@ class Classifier:
                     if not np.equal(data[:,i], data[0, i]).all():
                         # Make feature selectable
                         attributes.append(i)
-            
             attributes = np.array(attributes)
+            # Compute number of features to select (Breiman, 2001)
             size_feature_split = int(np.log2(len(attributes) + 1))
             
+            # Putting data and target in same array to make bagging easier
+            # xy = np.concatenate((data, target.reshape(1, len(target)).T), axis=1)
+            
             for i in range(self.n_trees):
+                # Random feature selection
                 features_i = np.random.choice(attributes, size_feature_split, replace=False)
-                print('Training tree {} with features:'.format(i))
-                print(features_i)
-                print()
                 
-                data_i = data[:, features_i]
-                
-                self.trees[i].fit(data_i, target)
+                # Bagging
+                # randomly select len(data) cases with replacement
+                cases_i = np.random.choice(range(len(data)), len(data))
+                data_i = data[cases_i, :]
+                data_i = data_i[:, features_i]
+                target_i = target[cases_i]
+
+                # Breiman (2001) doesn't prune the trees that make up the forest,
+                # but I've observed pruned trees result in pacman looping in the same
+                # couple of cells fewer times
+                self.trees[i].fit(data_i, target_i, prune=True)
             
             # print(size_feature_split)
         
@@ -70,8 +77,9 @@ class DecisionTree:
     def __init__(self):
         self.root = None
         self.default = None
+        self.pruned = False
         
-    def fit(self, data, target):
+    def fit(self, data, target, prune=True):
         """
         Fit tree to data by doing the following steps. 
             
@@ -80,8 +88,9 @@ class DecisionTree:
         3. Sort rules by certainty factor
         4. Select a default class
                 
-        Mainly based on ID3 and C4.5 but, for simplicity,
-        also other work by Quinlan.
+        Tree-building mostly based on ID3.
+        Remaining steps based on C4.5 but, for simplicity,
+        also previous works by Quinlan.
             
         Parameters
         ----------
@@ -113,14 +122,25 @@ class DecisionTree:
         # Build tree
         self.root = self.buildTree(data_train, target_train)
         
-        # Rule post-prunning
-        self.rulePostPrunning(data_train[1:len(data_train), :], target_train)
-        
-        # Sort by certainty factor (Quinlan, 1987a)
-        self.paths.sort(reverse=True, key=lambda x: x['cf'])
-        
-        # Find default path  
-        self.default = self.findDefault(data_train[1:len(data_train), :], target)
+        if prune == True:
+            # Generate rule table
+            paths = []
+            path = []
+            self.traverse(self.root, paths, list(path))
+            self.paths = paths
+            
+            # Rule post-prunning
+            self.paths = self.rulePostPrunning(paths, data_train[1:len(data_train), :], target_train)
+            
+            # Sort by certainty factor (Quinlan, 1987a)
+            self.paths.sort(reverse=True, key=lambda x: x['cf'])
+            
+            # Find default path  
+            self.default = self.findDefault(data_train[1:len(data_train), :], target)
+            
+            self.pruned = True
+        else:
+            self.pruned = False
         
     def predict(self, data, legal=None):
         """
@@ -140,9 +160,11 @@ class DecisionTree:
 
         """
         
-        
-        # Predict using simplified rules table
-        move = self.predictWithRules(data)
+        if self.pruned == True:
+            # Predict using simplified rules table
+            move = self.predictWithRules(data)
+        else:
+            move = self.traverseWithData(self.root, data)
         
         return move    
     
@@ -234,7 +256,7 @@ class DecisionTree:
         # Note a leaf, return node with branch pointing to subtrees
         return TreeNode(value=data[0][attr_max_gain_current_index], attr_false=left, attr_true=right)
 
-    def rulePostPrunning(self, data, target):
+    def rulePostPrunning(self, paths, data, target):
         """
         Converts original tree to list of rules, tests their significancy and
         removes them based on the certainty factor used in (Quinlan, 1987b)
@@ -251,12 +273,6 @@ class DecisionTree:
         None.
 
         """
-        
-        paths = []
-        
-        # Generate rule table
-        path = []
-        self.traverse(self.root, paths, list(path))
         
         # Remove rules
         for i in range(len(paths)):
@@ -291,8 +307,7 @@ class DecisionTree:
                 if certainty_alt >= certainty:
                     paths[i]['path'].remove(step)
         
-        # Set the tree's rule table
-        self.paths = paths
+        return paths
 
     def findDefault(self, data, target):
         """
@@ -791,96 +806,24 @@ def information_gain(data, target):
     return np.argmax(entropy_a)
 
 
-###################################################
-# References
+"""
+References
 
-# Quinlan, J. R. (1986). Induction of Decision Trees. Mach. Learn. 1, 1 (Mar. 1986), 81–106
+Quinlan, J. R. (1986). Induction of Decision Trees. Mach. Learn. 1, 1 (Mar. 1986), 81–106
+https://dl.acm.org/doi/10.1023/A%3A1022643204877
 
-# Quinlan, J. R. (1987a). Simplifying decision trees.
-# In International Journal of Man-Machine Studies (Vol. 27, Issue 3, pp. 221–234).
-# Elsevier BV. https://doi.org/10.1016/s0020-7373(87)80053-6
+Quinlan, J. R. (1987a). Simplifying decision trees.
+In International Journal of Man-Machine Studies (Vol. 27, Issue 3, pp. 221–234).
+Elsevier BV. https://doi.org/10.1016/s0020-7373(87)80053-6
 
-# Quinlan, J. R. (1987b). Generating production rules from decision trees
-# Proceedings of the 10th International Joint Conference on Artificial Intelligence - Volume 1, pp 304–307
+Quinlan, J. R. (1987b). Generating production rules from decision trees
+Proceedings of the 10th International Joint Conference on Artificial Intelligence - Volume 1, pp 304–307
+https://dl.acm.org/doi/10.5555/1625015.1625078
 
-# Ross Quinlan, J. (1992). C4.5: Programs for Machine Learning. Morgan Kaufmann.
+Ross Quinlan, J. (1992). C4.5: Programs for Machine Learning. Morgan Kaufmann.
+ISBN 1558602380, 9781558602380
 
-
-def runTests():
-    # Testint entropy
-    t1 = np.array([2,3,0,2,1])  # 1.921928
-    t2 = np.array([3,0,0,2,1])  # 1.921928
-    t3 = np.array([0,2,2,0,2])  # 0.970951
-    t4 = np.array([3,3,3,2,0])  # 1.370951
-    t5 = np.array([2,1,3,3,2])  # 1.521928
-    
-    print(entropy(t1))
-    print(entropy(t2))
-    print(entropy(t3))
-    print(entropy(t4))
-    print(entropy(t5))
-    print()
+Breiman, L. (2001). Random Forests. University of California, Statistics Department
+https://www.stat.berkeley.edu/~breiman/randomforest2001.pdf
             
-    # Testing information gain
-    data = np.array([
-        [0,0,0],
-        [0,1,1],
-        [1,0,2],
-        [1,1,1],
-        [0,1,0],
-        [0,1,2],
-        [0,2,1],
-        [1,1,0],
-        [1,0,2],
-        [1,2,0]
-        ])
-    target = np.array([1,1,0,1,1,1,0,0,1,0])
-    information_gain(data, target)
-    print()
-    
-    data = np.array([
-        [1,1,1,1],
-        [1,1,1,2],
-        [2,1,1,1],
-        [3,2,1,1],
-        [3,3,2,1],
-        [3,3,2,2],
-        [2,3,2,2],
-        [1,2,1,1],
-        [1,3,2,1],
-        [3,2,2,1],
-        [1,2,2,2],
-        [2,2,1,2],
-        [2,1,2,1],
-        [3,2,1,2]
-        ])
-    target = np.array([0,0,1,1,1,0,1,0,1,1,1,1,1,0])
-    information_gain(data, target)
-    print()
-                
-                
-            
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-
-
-
-
-
-
-
-
-
-
-
+"""
