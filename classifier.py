@@ -122,10 +122,10 @@ class Classifier:
         
         # FIXME This is wrong. Should be handled right after partitioning data
         # No cases left for this attribute
-        if data.shape[1] == 0:
-            # Use most common target value
-            print('DOES THIS ACTUALLY HAPPEN?????')
-            return TreeNode(value=np.argmax(np.bincount(target)))
+        # if data.shape[1] == 0:
+        #     # Use most common target value
+        #     print('DOES THIS ACTUALLY HAPPEN?????')
+        #     return TreeNode(value=np.argmax(np.bincount(target)))
         
         # All remaining test cases are equal
         # Excluding first row from check as those are headers
