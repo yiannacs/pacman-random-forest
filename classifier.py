@@ -18,12 +18,17 @@ class Classifier:
         List of trees that make up the forest.
     n_trees : int
         Number of trees in the forest.   
+    trained : bool
+        Indicates whether model has been trained. Used as a failsafe in
+        the case that an empty traning set is provided
 
     """
     
     def __init__(self, n_trees=10):
+        print('Creating random forest with {} trees'.format(n_trees))
         self.trees = [DecisionTree() for i in range(n_trees)]
         self.n_trees = n_trees
+        self.trained = False
 
     def reset(self):
         pass
@@ -47,6 +52,12 @@ class Classifier:
 
         """
         
+        # No data provided
+        if len(data) == 0:
+            print('Empty training set')
+            return
+        
+        print('Training model')
         data = np.array(data)
         target = np.array(target)
         
@@ -84,9 +95,13 @@ class Classifier:
                 # in the same couple of cells
                 self.trees[i].fit(data_i, target_i, prune=prune)
         
+        self.trained = True
+        print('Done training')
+        
     def predict(self, data, legal=None):
         """
-        Predicts correct move based on state of the game given by data
+        Predicts correct move based on state of the game given by data.
+        If the model is not trained, returns a random choice.
 
         Parameters
         ----------
@@ -102,6 +117,10 @@ class Classifier:
 
         """
         
+        if self.trained == False:
+            print('Model is not trained, returning a random move')
+            return np.random.choice(range(4))
+            
         data = np.array(data)
 
         if self.n_trees == 1:    
