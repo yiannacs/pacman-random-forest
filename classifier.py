@@ -16,7 +16,7 @@ class Classifier:
     ----------
     trees : list(DecisionTree)
         List of trees that make up the forest.
-    n_trees : int
+    nTrees : int
         Number of trees in the forest.   
     trained : bool
         Indicates whether model has been trained. Used as a failsafe in
@@ -24,10 +24,10 @@ class Classifier:
 
     """
     
-    def __init__(self, n_trees=10):
-        print('Creating random forest with {} trees'.format(n_trees))
-        self.trees = [DecisionTree() for i in range(n_trees)]
-        self.n_trees = n_trees
+    def __init__(self, nTrees=10):
+        print('Creating random forest with {} trees'.format(nTrees))
+        self.trees = [DecisionTree() for i in range(nTrees)]
+        self.nTrees = nTrees
         self.trained = False
 
     def reset(self):
@@ -61,7 +61,7 @@ class Classifier:
         data = np.array(data)
         target = np.array(target)
         
-        if self.n_trees == 1:
+        if self.nTrees == 1:
             # Train tree with set as it is
             self.trees[0].fit(data, target)
         else:
@@ -77,23 +77,23 @@ class Classifier:
                         attributes.append(i)
             attributes = np.array(attributes)
             # Compute number of features to select (Breiman, 2001)
-            size_feature_split = int(np.log2(len(attributes) + 1))
+            sizeFeatureSplit = int(np.log2(len(attributes) + 1))
             
-            for i in range(self.n_trees):
+            for i in range(self.nTrees):
                 # Random feature selection
-                features_i = np.random.choice(attributes, size_feature_split, replace=False)
+                treeFeatures = np.random.choice(attributes, sizeFeatureSplit, replace=False)
                 
                 # Bagging
                 # randomly select len(data) cases with replacement
-                cases_i = np.random.choice(range(len(data)), len(data))
-                data_i = data[cases_i, :]
-                data_i = data_i[:, features_i]
-                target_i = target[cases_i]
+                treeCases = np.random.choice(range(len(data)), len(data))
+                treeData = data[treeCases, :]
+                treeData = treeData[:, treeFeatures]
+                treeTarget = target[treeCases]
 
                 # Breiman (2001) doesn't prune the trees that make up the forest,
                 # but I've observed that pruned trees result in less looping
                 # in the same couple of cells
-                self.trees[i].fit(data_i, target_i, prune=prune)
+                self.trees[i].fit(treeData, treeTarget, prune=prune)
         
         self.trained = True
         print('Done training')
@@ -123,7 +123,7 @@ class Classifier:
             
         data = np.array(data)
 
-        if self.n_trees == 1:    
+        if self.nTrees == 1:    
             # If a single tree, simply return its prediction
             return self.trees[0].predict(data, legal)
         else:
@@ -155,8 +155,8 @@ class DecisionTree:
         Rules are represented as a dictionary with elements 'path'
         (conditions in the rule), 'target' (predicted class for cases that
         follow the rule) and 'cf' (certainty factor or accurary of the rule)
-        Rule conditions are represented as a pair of (attribute_index, value),
-        where attribute_index is the column of the index evaluated by the
+        Rule conditions are represented as a pair of (attributeIndex, value),
+        where attributeIndex is the column of the index evaluated by the
         condition, and value is the value the attribute must have to comply
         with the rule.        
 
@@ -203,17 +203,17 @@ class DecisionTree:
         # target = np.array(target)
         
         # Not splitting data
-        data_train = data
-        target_train = target
+        dataTrain = data
+        targetTrain = target
         
         # Add headers to training data:
-        # [0, 1, 2, ..., number_of_attributes - 1]
+        # [0, 1, 2, ..., numberOfAttributes - 1]
         # This makes it easier to keep indexes when splitting/taking attributes out
         idx = np.array(range(data.shape[1])).reshape(1, data.shape[1])
-        data_train = np.concatenate((idx, data_train), axis=0)
+        dataTrain = np.concatenate((idx, dataTrain), axis=0)
         
         # Build tree
-        self.root = self.buildTree(data_train, target_train)
+        self.root = self.buildTree(dataTrain, targetTrain)
         
         if prune == True:
             # Generate rule table            
@@ -221,13 +221,13 @@ class DecisionTree:
             
             # Rule post-prunning
             # Pass data without attribute headers
-            self.paths = self.rulePostPrunning(self.paths, data_train[1:len(data_train), :], target_train)
+            self.paths = self.rulePostPrunning(self.paths, dataTrain[1:len(dataTrain), :], targetTrain)
             
             # Sort by certainty factor (Quinlan, 1987a)
             self.paths.sort(reverse=True, key=lambda x: x['cf'])
             
             # Find default path  
-            self.default = self.findDefault(data_train[1:len(data_train), :], target)
+            self.default = self.findDefault(dataTrain[1:len(dataTrain), :], target)
             
             self.pruned = True
         else:
@@ -247,7 +247,7 @@ class DecisionTree:
         paths : list(dict('path', 'target'))
             List of rules.
             Each entry is a dictionary containing 'path', which in turn
-            is a list of pairs (attribute_index, value), and 'target', which
+            is a list of pairs (attributeIndex, value), and 'target', which
             is the class the rule in 'path' leads to.
 
         """
@@ -324,52 +324,52 @@ class DecisionTree:
         # All features are binary, so information gain is a good metric
         # to determine importance of features.
         # Need only the index in the current array, so don't need to pass headers
-        attr_max_gain_current_index = information_gain(data[1:, :], target)
+        attrMaxGainCurrentIndex = informationGain(data[1:, :], target)
         
-        # Divide data by values of attr_max_gain
-        attr_zeros, target_zeros, attr_ones, target_ones = self.branchOutAttribute(attr_max_gain_current_index,
-                                                                               data,
-                                                                               target)
+        # Divide data by values of the attribute with greatest gain
+        x0, y0, x1, y1 = self.branchOutAttribute(attrMaxGainCurrentIndex,
+                                                 data,
+                                                 target)
         
         # No cases when attribute == 0
-        if len(target_zeros) == 0:
+        if len(y0) == 0:
             # Set branch to leaf with class given by the most common class at this node
-            left = TreeNode(value=np.argmax(np.bincount(target_zeros)))
+            left = TreeNode(value=np.argmax(np.bincount(y0)))
         # Still have data,
         else:
             # recursively built this branch
-            left = self.buildTree(attr_zeros, target_zeros)
+            left = self.buildTree(x0, y0)
 
         # Determine if left branch points to leaf            
-        if left.attr_false is None and left.attr_true is None:
-            left_is_leaf = True
+        if left.attrFalse is None and left.attrTrue is None:
+            leftIsLeaf = True
         else:
-            left_is_leaf = False
+            leftIsLeaf = False
 
         # No cases with attribute == 0
-        if len(target_ones) == 0:
+        if len(y1) == 0:
             # Set branch to leaf with class given by the most common class at this node
             right = TreeNode(value=np.argmax(np.bincount(target)))
         # There are cases where attribute is 1
         else:
             # Recursively build right branch
-            right = self.buildTree(attr_ones, target_ones)
+            right = self.buildTree(x1, y1)
 
         # Determine if right branch points to a leaf 
-        if right.attr_false is None and right.attr_true is None:
-            right_is_leaf = True
+        if right.attrFalse is None and right.attrTrue is None:
+            rightIsLeaf = True
         else:
-            right_is_leaf = False
+            rightIsLeaf = False
         
         # If both branches point to leaves,
         # and both leaves have the same class,
-        if right_is_leaf and left_is_leaf:
+        if rightIsLeaf and leftIsLeaf:
             if right.value == left.value:
                 # Discard leaves and set this node to said class
                 return TreeNode(value=right.value)
             
         # Note a leaf, return node with branch pointing to subtrees
-        return TreeNode(value=data[0][attr_max_gain_current_index], attr_false=left, attr_true=right)
+        return TreeNode(value=data[0][attrMaxGainCurrentIndex], attrFalse=left, attrTrue=right)
 
     def rulePostPrunning(self, paths, data, target):
         """
@@ -393,33 +393,33 @@ class DecisionTree:
         for i in range(len(paths)):
             for step in paths[i]['path']:
                 # Deep copy to keep original intact when removing preconditions
-                alt_path = copy.deepcopy(paths)
+                altPath = copy.deepcopy(paths)
                 
                 # Remove current precondition from rule
-                alt_path[i]['path'].remove(step)
+                altPath[i]['path'].remove(step)
                 
                 # Build contingency table
                 xy = np.concatenate((data, target.reshape(1, len(target)).T), axis=1)
                 
                 # Separate cases that belong and not belong to the rule's class
-                belong_to_class = np.array([xy[l, :] for l in range(xy.shape[0]) if xy[l, -1]==paths[i]['target']])
-                not_belong_to_class = np.array([xy[l, :] for l in range(xy.shape[0]) if xy[l, -1] != paths[i]['target']])
+                belongToClass = np.array([xy[l, :] for l in range(xy.shape[0]) if xy[l, -1]==paths[i]['target']])
+                notBelongToClass = np.array([xy[l, :] for l in range(xy.shape[0]) if xy[l, -1] != paths[i]['target']])
                 
                 # Count combinations of [not] belonging to the class and [not] satisfying the rule
-                belong_satisfy = np.sum(belong_to_class[:, step[0]])
-                belong_not_satisfy = belong_to_class.shape[0] - belong_satisfy
-                not_belong_satisfy = np.sum(not_belong_to_class[:, step[0]])
-                not_belong_not_satisfy = not_belong_to_class.shape[0] - not_belong_satisfy
+                belongSatisfy = np.sum(belongToClass[:, step[0]])
+                belongNotSatisfy = belongToClass.shape[0] - belongSatisfy
+                notBelongSatisfy = np.sum(notBelongToClass[:, step[0]])
+                notBelongNotSatisfy = notBelongToClass.shape[0] - notBelongSatisfy
                 
                 # Compute certainty factor for original and alternate rule
-                certainty = self.computeCertainty(belong_satisfy, not_belong_satisfy)
-                certainty_alt = self.computeCertainty(belong_satisfy + belong_not_satisfy, not_belong_satisfy + not_belong_not_satisfy)
+                certainty = self.computeCertainty(belongSatisfy, notBelongSatisfy)
+                altCertainty = self.computeCertainty(belongSatisfy + belongNotSatisfy, notBelongSatisfy + notBelongNotSatisfy)
                 
                 # Set the rule's certainty factor to the greater one
-                paths[i]['cf'] = max([certainty, certainty_alt])
+                paths[i]['cf'] = max([certainty, altCertainty])
                 
                 # Keep the rule with the greater certainty factor
-                if certainty_alt >= certainty:
+                if altCertainty >= certainty:
                     paths[i]['path'].remove(step)
         
         return paths
@@ -447,14 +447,14 @@ class DecisionTree:
         predictions = self.predictWithRulesBatch(data)
         
         # Get classes from training cases that yield no answer
-        unpredicted_targets = target[np.argwhere(predictions==None)]
+        unpredictedTargets = target[np.argwhere(predictions==None)]
         
         # If all cases had a rule, return most common class
-        if len(unpredicted_targets) < 1:
+        if len(unpredictedTargets) < 1:
             return np.argmax(np.bincount(target))
         
         # Return most common class among unpredicted cases
-        return np.argmax(np.bincount(unpredicted_targets.flatten()))
+        return np.argmax(np.bincount(unpredictedTargets.flatten()))
         
     def discardRuleSupersets(self, paths, target):
         """
@@ -475,30 +475,30 @@ class DecisionTree:
 
         """
         
-        found_target_i = False
-        for path_i in paths:
-            if path_i['target'] == target:
-                found_target_i = True
+        iFoundTarget = False
+        for iPath in paths:
+            if iPath['target'] == target:
+                iFoundTarget = True
                 
                 # Eat up overhead of looping from the start to not deal with
                 # updating indices
-                found_target_j = False
-                for path_j in paths:
-                    if path_j['target'] == target:
-                        found_target_j = True
+                jFoundTarget = False
+                for jPath in paths:
+                    if jPath['target'] == target:
+                        jFoundTarget = True
                 
                         # Check if any of pair is subset of another,
                         # delete superset
-                        if path_i != path_j:
-                            if set(path_i['path']).issubset(path_j['path']):
-                                paths.remove(path_j)
+                        if iPath != jPath:
+                            if set(iPath['path']).issubset(jPath['path']):
+                                paths.remove(jPath)
                                 
-                            if set(path_j['path']).issubset(path_i['path']):
-                                paths.remove(path_i)
+                            if set(jPath['path']).issubset(iPath['path']):
+                                paths.remove(iPath)
                                 
-                    elif found_target_j:
+                    elif jFoundTarget:
                         break
-            elif found_target_i:
+            elif iFoundTarget:
                 break
             
         return paths
@@ -545,8 +545,8 @@ class DecisionTree:
         
         predictions = []
         for row in data:
-            pred_i = self.predictWithRules(row, alt)
-            predictions.append(pred_i)
+            prediction = self.predictWithRules(row, alt)
+            predictions.append(prediction)
             
         return np.array(predictions)
         
@@ -621,19 +621,19 @@ class DecisionTree:
         """
         
         # Node is not a leaf
-        if node.attr_true is not None:
+        if node.attrTrue is not None:
             # Take left path
-            path_left = list(path)
-            path_left.append((node.value, 0))
-            self.traverse(node.attr_false, paths, path_left)
+            leftPath = list(path)
+            leftPath.append((node.value, 0))
+            self.traverse(node.attrFalse, paths, leftPath)
 
             # Take right path
-            path_right = list(path)
-            path_right.append((node.value, 1))                
-            self.traverse(node.attr_true, paths, path_right)
+            rightPath = list(path)
+            rightPath.append((node.value, 1))                
+            self.traverse(node.attrTrue, paths, rightPath)
             
         # Node is a leaf
-        if node.attr_true is None:
+        if node.attrTrue is None:
             paths.append({'path': path, 'target': node.value})
         
     def printTree(self, node, depth=0):
@@ -655,13 +655,13 @@ class DecisionTree:
         """
         
         # Node is not a leaf
-        if (node.attr_false is not None) or (node.attr_true is not None):
+        if (node.attrFalse is not None) or (node.attrTrue is not None):
             # Print current node as an attribute index
             print('{}\tindex = {}'.format(depth, node.value))
             
             # Keep traversing tree
-            self.printTree(node.attr_false, depth + 1)
-            self.printTree(node.attr_true, depth + 1)
+            self.printTree(node.attrFalse, depth + 1)
+            self.printTree(node.attrTrue, depth + 1)
         else:
             # Print node as a class
             print('{}\ttarget = {}'.format(depth, node.value))
@@ -682,46 +682,46 @@ class DecisionTree:
 
         Returns
         -------
-        x_0 : numpy.ndarray
+        x0 : numpy.ndarray
             Cases data where attribute is 0.
-        y_0: numpy.ndarray
+        y0: numpy.ndarray
             Classes corresponding to cases where attribute is 0.
-        x_1 : numpy.ndarray
+        x1 : numpy.ndarray
             Cases data where attribute is 1.
-        y_1 : numpy.ndarray
+        y1 : numpy.ndarray
             Classes corresponding to cases where attribute is 1.
 
         """
         
-        x_0 = []
-        x_1 = []
-        y_0 = []
-        y_1 = []
+        x0 = []
+        x1 = []
+        y0 = []
+        y1 = []
         
         # Add headers to both x
-        x_0.append(data[0])
-        x_1.append(data[0])
+        x0.append(data[0])
+        x1.append(data[0])
         
         # Divide depending on value of attr
         for i in range(1, data.shape[0]):
             if data[i][attr] == 0:
-                x_0.append(data[i])
-                y_0.append(target[i - 1])
+                x0.append(data[i])
+                y0.append(target[i - 1])
             else:
-                x_1.append(data[i])
-                y_1.append(target[i - 1])
+                x1.append(data[i])
+                y1.append(target[i - 1])
         
         # Convert to numpy.ndarray
-        x_0 = np.array(x_0)
-        x_1 = np.array(x_1)
-        y_0 = np.array(y_0)
-        y_1 = np.array(y_1)
+        x0 = np.array(x0)
+        x1 = np.array(x1)
+        y0 = np.array(y0)
+        y1 = np.array(y1)
         
         # Remove attribute from data
-        x_0 = np.delete(x_0, attr, axis=1)
-        x_1 = np.delete(x_1, attr, axis=1)
+        x0 = np.delete(x0, attr, axis=1)
+        x1 = np.delete(x1, attr, axis=1)
     
-        return x_0, y_0, x_1, y_1
+        return x0, y0, x1, y1
 
     def predictBatch(self, data, legal=None):
         """
@@ -745,8 +745,8 @@ class DecisionTree:
         moves = []
         
         # Call predict on each row
-        for data_i in data:
-            moves.append(self.predict(data_i))
+        for datum in data:
+            moves.append(self.predict(datum))
             
         return np.array(moves)
                 
@@ -770,7 +770,7 @@ class DecisionTree:
         """
         
         # If node is a leaf, return value
-        if node.attr_false is None and node.attr_true is None:
+        if node.attrFalse is None and node.attrTrue is None:
             return node.value
         
         # Node is not a leaf
@@ -778,11 +778,11 @@ class DecisionTree:
         # If value in data of node attribute is 1,
         if data[attribute]:
             # Traverse right branch
-            return self.traverseWithData(node.attr_true, data)
+            return self.traverseWithData(node.attrTrue, data)
         # If value in data of node attribute is 0,
         else:
             # Traverse left branch
-            return self.traverseWithData(node.attr_false, data)
+            return self.traverseWithData(node.attrFalse, data)
       
     def printRuleTable(self):
         """
@@ -816,16 +816,16 @@ class TreeNode():
     value : int
         If the node is not a leaf, attribute to check when passing the node.
         If the node is a leaf, predicted target value.
-    attr_false : TreeNode
+    attrFalse : TreeNode
         Root of subtree in left (i.e. value of node attribute is 0) branch.
-    attr_true : TreeNode
+    attrTrue : TreeNode
         Root of subtree in right (i.e. value of node attribute is 1) branch.
 
     """
-    def __init__(self, value=0, attr_false=None, attr_true=None):
+    def __init__(self, value=0, attrFalse=None, attrTrue=None):
         self.value = value
-        self.attr_false = attr_false
-        self.attr_true = attr_true
+        self.attrFalse = attrFalse
+        self.attrTrue = attrTrue
     
 def entropy(target):
     """
@@ -847,18 +847,18 @@ def entropy(target):
     values, count = np.unique(target, return_counts=True)
     
     # Compute probability for each outcome
-    p_i = count/len(target)
+    p = count/len(target)
     
     # 0 yields nan when computing log2
     # Replace with 1. Since log2(1) = 0,
     # 0*log2(0) = 0 is kept
-    p_i = np.ma.masked_equal(p_i, 0).filled(1)
+    p = np.ma.masked_equal(p, 0).filled(1)
     
-    entropy = np.sum(-p_i*np.log2(p_i))
+    entropy = np.sum(-p*np.log2(p))
         
     return entropy
         
-def information_gain(data, target):
+def informationGain(data, target):
     """
     Determines the feature that best represents a dataset by
     computing the information gain for everyone of them and finding the 
@@ -880,37 +880,37 @@ def information_gain(data, target):
     """
     
     # Entropy of the dataset
-    entropy_s = entropy(target)
+    setEntropy = entropy(target)
     
     # Initialise entropy for each feature
-    entropy_a = np.zeros(data.shape[1])
+    featureEntropy = np.zeros(data.shape[1])
     
     # For each feature:
     for i in range(data.shape[1]):
         # Count occurences of each possible value of the feature
-        feature_values, feature_count = np.unique(data[:, i], return_counts=True)
+        featureValues, featureCount = np.unique(data[:, i], return_counts=True)
         
-        sum_entropy_v = 0
+        valueEntropySum = 0
         # For each value of the feature
-        for j in range(len(feature_count)):
+        for j in range(len(featureCount)):
             # Get target values of cases where current attribute has current value
-            target_v = np.ma.masked_where(data[:, i] != feature_values[j], target)
-            target_v = target_v.compressed()
+            valueTarget = np.ma.masked_where(data[:, i] != featureValues[j], target)
+            valueTarget = valueTarget.compressed()
             
             # Get entropy for that subset of cases
-            entropy_v = entropy(target_v)
+            subsetEntropy = entropy(valueTarget)
             
             # Get probability of current attribute value
-            p_v = feature_count[j]/data.shape[0]
+            valueP = featureCount[j]/data.shape[0]
           
             # Accumulate entropy of current attribute
-            sum_entropy_v += p_v * entropy_v
+            valueEntropySum += valueP * subsetEntropy
                                 
         # Compute entropy for current attribute
-        entropy_a[i] = entropy_s - sum_entropy_v
+        featureEntropy[i] = setEntropy - valueEntropySum
     
     # Return index of attribute with highest information gain
-    return np.argmax(entropy_a)
+    return np.argmax(featureEntropy)
 
 
 """
