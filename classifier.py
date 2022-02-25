@@ -10,13 +10,26 @@ import random
 
 class Classifier:
     def __init__(self):
-        self.root = TreeNode()
-        self.default = None
+        # self.root = TreeNode()
+        # self.default = None
+        self.tree = DecisionTree()
 
     # TODO Do I need something here?
     def reset(self):
         pass
     
+    def fit(self, data, target):
+        self.tree.fit(data, target)
+        self.tree.printRuleTable()
+        
+    def predict(self, data, legal=None):
+        self.tree.predict(data, legal)
+    
+class DecisionTree:
+    def __init__(self):
+        self.root = None
+        self.default = None
+        
     def fit(self, data, target):
         """
         Fit tree to data by doing the following steps. 
@@ -49,9 +62,6 @@ class Classifier:
         # Not splitting data
         data_train = data
         target_train = target
-        
-        # Split data
-        # data_train, data_test, target_train, target_test = train_test_split(data, target, test_size=0.15)
         
         # Add headers to training data:
         # [0, 1, 2, ..., number_of_attributes - 1]
@@ -609,6 +619,21 @@ class Classifier:
         else:
             # Traverse left branch
             return self.traverseWithData(node.attr_false, data)
+      
+    def printRuleTable(self):
+        """
+        Prints the tree's rule table
+
+        Returns
+        -------
+        None.
+
+        """
+        
+        for path in self.paths:
+            print(path)
+            
+        print('Default class: {}'.format(self.default))
         
 class TreeNode():
     """
