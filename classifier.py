@@ -4,20 +4,49 @@
 # Use the skeleton below for the classifier and insert your code here.
 
 import numpy as np
-from sklearn.model_selection import train_test_split
 import copy
-import random
 
 class Classifier:
+    """
+    Random forest made up of a settable number of trees (pruned or unprunned).
+    If the number of trees is set to 1, it behaves like a standard, 
+    single decission tree. 
+    
+    Attributes
+    ----------
+    trees : list(DecisionTree)
+        List of trees that make up the forest.
+    n_trees : int
+        Number of trees in the forest.   
+
+    """
+    
     def __init__(self, n_trees=10):
         self.trees = [DecisionTree() for i in range(n_trees)]
         self.n_trees = n_trees
 
-    # TODO Do I need something here?
     def reset(self):
         pass
     
-    def fit(self, data, target):
+    def fit(self, data, target, prune=True):
+        """
+        Builds tree(s) to make up a random forest.
+
+        Parameters
+        ----------
+        data : numpy.ndarray
+            Dataset cases to train the tree(s).
+        target : numpy.ndarray
+            Target values for the given cases.
+        prune : bool, optional
+            Indicates whether to prune the trees in the forest.
+
+        Returns
+        -------
+        None.
+
+        """
+        
         data = np.array(data)
         target = np.array(target)
         
@@ -39,9 +68,6 @@ class Classifier:
             # Compute number of features to select (Breiman, 2001)
             size_feature_split = int(np.log2(len(attributes) + 1))
             
-            # Putting data and target in same array to make bagging easier
-            # xy = np.concatenate((data, target.reshape(1, len(target)).T), axis=1)
-            
             for i in range(self.n_trees):
                 # Random feature selection
                 features_i = np.random.choice(attributes, size_feature_split, replace=False)
@@ -54,30 +80,74 @@ class Classifier:
                 target_i = target[cases_i]
 
                 # Breiman (2001) doesn't prune the trees that make up the forest,
-                # but I've observed pruned trees result in pacman looping in the same
-                # couple of cells fewer times
-                self.trees[i].fit(data_i, target_i, prune=True)
-            
-            # print(size_feature_split)
+                # but I've observed that pruned trees result in less looping
+                # in the same couple of cells
+                self.trees[i].fit(data_i, target_i, prune=prune)
         
     def predict(self, data, legal=None):
+        """
+        Predicts correct move based on state of the game given by data
+
+        Parameters
+        ----------
+        data : list(int)
+            List of bits describing the state of the game.
+        legal : list(int), optional
+            List of legal moves. The default is None.
+
+        Returns
+        -------
+        int 
+            Predicted 'good' move based on data.
+
+        """
+        
         data = np.array(data)
 
         if self.n_trees == 1:    
+            # If a single tree, simply return its prediction
             return self.trees[0].predict(data, legal)
         else:
+            # If many trees, gather their predictions
             predictions = []
             
             for tree in self.trees:
                 predictions.append(tree.predict(data, legal))
                 
+            # Return the most common prediction
             return np.argmax(np.bincount(predictions))
             
 class DecisionTree:
+    """
+    Decission tree.
+    
+    Attributes
+    ----------
+    root : TreeNode
+        Root node of the tree.
+    default : int
+        Class to return by default if a given case does not fit any rule.
+    pruned : bool
+        Indicates whether the tree has been pruned or not. Used by class methods
+        to choose the correct way to predict outcomes
+    paths : list(dict('path', 'target', 'cf'))
+        Rules table represented by a list.
+        Each entry in the list corresponds to one rule.
+        Rules are represented as a dictionary with elements 'path'
+        (conditions in the rule), 'target' (predicted class for cases that
+        follow the rule) and 'cf' (certainty factor or accurary of the rule)
+        Rule conditions are represented as a pair of (attribute_index, value),
+        where attribute_index is the column of the index evaluated by the
+        condition, and value is the value the attribute must have to comply
+        with the rule.        
+
+    """
+    
     def __init__(self):
         self.root = None
         self.default = None
         self.pruned = False
+        self.paths = None
         
     def fit(self, data, target, prune=True):
         """
@@ -98,6 +168,10 @@ class DecisionTree:
             Training set data
         target : numpy.darray
             Classes for training data
+        prune : bool, optional
+            If True, converts the tree to a rule set and does rule post-prunning.
+            If False, simply fits the tree to the given data.
+            The default is True.
 
         Returns
         -------
@@ -123,14 +197,12 @@ class DecisionTree:
         self.root = self.buildTree(data_train, target_train)
         
         if prune == True:
-            # Generate rule table
-            paths = []
-            path = []
-            self.traverse(self.root, paths, list(path))
-            self.paths = paths
+            # Generate rule table            
+            self.paths = self.generateRuleTable(self.root)
             
             # Rule post-prunning
-            self.paths = self.rulePostPrunning(paths, data_train[1:len(data_train), :], target_train)
+            # Pass data without attribute headers
+            self.paths = self.rulePostPrunning(self.paths, data_train[1:len(data_train), :], target_train)
             
             # Sort by certainty factor (Quinlan, 1987a)
             self.paths.sort(reverse=True, key=lambda x: x['cf'])
@@ -142,9 +214,37 @@ class DecisionTree:
         else:
             self.pruned = False
         
+    def generateRuleTable(self, node):
+        """
+        Generates rule table for tree rooted at node
+
+        Parameters
+        ----------
+        node : TreeNode
+            Root of the tree from which to generate rules.
+
+        Returns
+        -------
+        paths : list(dict('path', 'target'))
+            List of rules.
+            Each entry is a dictionary containing 'path', which in turn
+            is a list of pairs (attribute_index, value), and 'target', which
+            is the class the rule in 'path' leads to.
+
+        """
+        
+        paths = []
+        
+        path = []
+        self.traverse(node, paths, list(path))
+        self.traverse(node, paths, list(path))
+        
+        return paths
+    
     def predict(self, data, legal=None):
         """
-        Predict good move given state defined by data
+        Predict good move given state defined by data.
+        If the predicted 'good' move is not legal, returns default move.
 
         Parameters
         ----------
@@ -165,6 +265,9 @@ class DecisionTree:
             move = self.predictWithRules(data)
         else:
             move = self.traverseWithData(self.root, data)
+            
+        if move not in legal:
+            return self.default
         
         return move    
     
@@ -191,13 +294,6 @@ class DecisionTree:
         if np.equal(target, target[0]).all():
             # Return said class
             return TreeNode(value=target[0])
-        
-        # FIXME This is wrong. Should be handled right after partitioning data
-        # No cases left for this attribute
-        # if data.shape[1] == 0:
-        #     # Use most common target value
-        #     print('DOES THIS ACTUALLY HAPPEN?????')
-        #     return TreeNode(value=np.argmax(np.bincount(target)))
         
         # All remaining test cases are equal
         # Excluding first row from check as those are headers
@@ -339,15 +435,14 @@ class DecisionTree:
             return np.argmax(np.bincount(target))
         
         # Return most common class among unpredicted cases
-        print('There were unpredicted cases')
-        print(unpredicted_targets)
         return np.argmax(np.bincount(unpredicted_targets.flatten()))
         
     def discardRuleSupersets(self, paths, target):
         """
         For each possible class, remove rules that are supersets of simpler rules.
         
-        Currently not used
+        Currently not used as rules are sorted by certainty factor and this
+        could remove a rule with a greater value.
 
         Parameters
         ----------
@@ -356,19 +451,20 @@ class DecisionTree:
 
         Returns
         -------
-        None.
+        list(dict('path', 'target'))
+            Rule list with supersets that lead to target removed
 
         """
         
         found_target_i = False
-        for path_i in self.paths:
+        for path_i in paths:
             if path_i['target'] == target:
                 found_target_i = True
                 
                 # Eat up overhead of looping from the start to not deal with
                 # updating indices
                 found_target_j = False
-                for path_j in self.paths:
+                for path_j in paths:
                     if path_j['target'] == target:
                         found_target_j = True
                 
@@ -376,15 +472,17 @@ class DecisionTree:
                         # delete superset
                         if path_i != path_j:
                             if set(path_i['path']).issubset(path_j['path']):
-                                self.paths.remove(path_j)
+                                paths.remove(path_j)
                                 
                             if set(path_j['path']).issubset(path_i['path']):
-                                self.paths.remove(path_i)
+                                paths.remove(path_i)
                                 
                     elif found_target_j:
                         break
             elif found_target_i:
                 break
+            
+        return paths
                     
     def computeCertainty(self, y1, e1):
         """
@@ -543,8 +641,8 @@ class DecisionTree:
             print('{}\tindex = {}'.format(depth, node.value))
             
             # Keep traversing tree
-            self.printTree(node.attr_false, depth+1)
-            self.printTree(node.attr_true, depth+1)
+            self.printTree(node.attr_false, depth + 1)
+            self.printTree(node.attr_true, depth + 1)
         else:
             # Print node as a class
             print('{}\ttarget = {}'.format(depth, node.value))
@@ -565,56 +663,46 @@ class DecisionTree:
 
         Returns
         -------
-        attr_zeros : numpy.ndarray
+        x_0 : numpy.ndarray
             Cases data where attribute is 0.
-        target_zeros : numpy.ndarray
+        y_0: numpy.ndarray
             Classes corresponding to cases where attribute is 0.
-        attr_ones : numpy.ndarray
+        x_1 : numpy.ndarray
             Cases data where attribute is 1.
-        target_ones : numpy.ndarray
+        y_1 : numpy.ndarray
             Classes corresponding to cases where attribute is 1.
 
         """
         
-        # Get mask that keeps rows where attribute value is 0
-        # (exclude headers row)
-        mask_zeros = np.ma.masked_where(data[1:,attr]==1, data[1:, attr]).mask
-        # If the mask is empty, allow all values
-        if isinstance(mask_zeros,  np.bool_):
-            mask_zeros = np.zeros(len(data[1:]))
+        x_0 = []
+        x_1 = []
+        y_0 = []
+        y_1 = []
         
-        # Get mask for cases when attribute is 1
-        mask_ones = np.logical_not(mask_zeros)
+        # Add headers to both x
+        x_0.append(data[0])
+        x_1.append(data[0])
         
-        # Mask target before reshaping mask 
-        target_zeros = np.ma.MaskedArray(target, mask=mask_zeros)
-        target_ones = np.ma.MaskedArray(target, mask=mask_ones)
+        # Divide depending on value of attr
+        for i in range(1, data.shape[0]):
+            if data[i][attr] == 0:
+                x_0.append(data[i])
+                y_0.append(target[i - 1])
+            else:
+                x_1.append(data[i])
+                y_1.append(target[i - 1])
         
-        # Modify mask to fit with data headers
-        mask_zeros = np.concatenate(([0], mask_zeros))
-        mask_ones = np.concatenate(([0], mask_ones))
-        
-        # Reshape to size of the full data array
-        mask_zeros = np.concatenate((mask_zeros.reshape(len(mask_zeros),1), np.zeros((len(mask_zeros), data.shape[1] - 1))), axis=1)
-        mask_ones = np.concatenate((mask_ones.reshape(len(mask_ones),1), np.zeros((len(mask_ones), data.shape[1] - 1))), axis=1)
-        
-        # Create masked arrays with full data and correctly-shaped masks
-        attr_zeros = np.ma.MaskedArray(data, mask = mask_zeros)
-        attr_ones = np.ma.MaskedArray(data, mask = mask_ones)
-        
-        # Keep only cases when attribute is 0
-        attr_zeros = np.ma.compress_rowcols(attr_zeros, axis=0)
-        target_zeros = np.ma.compressed(target_zeros)
-        
-        # Keep only cases when attribute is 1
-        attr_ones = np.ma.compress_rowcols(attr_ones, axis=0)
-        target_ones = np.ma.compressed(target_ones)
+        # Convert to numpy.ndarray
+        x_0 = np.array(x_0)
+        x_1 = np.array(x_1)
+        y_0 = np.array(y_0)
+        y_1 = np.array(y_1)
         
         # Remove attribute from data
-        attr_zeros = np.delete(attr_zeros, attr, axis=1)
-        attr_ones = np.delete(attr_ones, attr, axis=1)
-        
-        return attr_zeros, target_zeros, attr_ones, target_ones    
+        x_0 = np.delete(x_0, attr, axis=1)
+        x_1 = np.delete(x_1, attr, axis=1)
+    
+        return x_0, y_0, x_1, y_1
 
     def predictBatch(self, data, legal=None):
         """
@@ -694,7 +782,7 @@ class DecisionTree:
         
 class TreeNode():
     """
-    Class for tree nodes.
+    Decission tree node.
     
     Holds the index of the attribute to check when traversing the tree and
     passing through the node. Alternatively, if the node is a leaf, holds the
